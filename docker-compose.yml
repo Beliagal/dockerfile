@@ -1,0 +1,78 @@
+services:
+  # Servicio de la aplicación PHP (PHP-FPM)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: php_app
+    restart: always
+    # Carga las variables de entorno desde .env
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "sh", "-c", "ps aux | grep -v grep | grep php-fpm"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    volumes:
+      # Monta el código fuente en el contenedor
+      - ./src:/var/www/html
+    networks:
+      - app-network
+
+  # Servicio del servidor web (Nginx)
+  nginx:
+    image: nginx:stable-alpine
+    container_name: nginx_server
+    restart: always
+    ports:
+      # Mapea el puerto 8080 del host al puerto 80 del contenedor
+      - "${NGINX_HOST_PORT}:80"
+    volumes:
+      # Monta el código fuente
+      - ./src:/var/www/html
+      # Monta la configuración personalizada de Nginx
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      - app
+    networks:
+      - app-network
+
+  # Servicio de la base de datos (MySQL)
+  db:
+    image: mysql:8.0
+    container_name: mysql_db
+    restart: always
+    env_file:
+      - .env
+    environment:
+      # Variables de entorno de MySQL que usan las variables de .env
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "${MYSQL_USER}", "-p${MYSQL_PASSWORD}"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    volumes:
+      # Volumen persistente para los datos de la base de datos
+      - db_data:/var/lib/mysql
+    networks:
+      - app-network
+
+# Redes
+networks:
+  app-network:
+    driver: bridge
+
+# Volúmenes persistentes
+volumes:
+  db_data:
+    driver: local
